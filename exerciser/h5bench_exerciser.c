@@ -24,6 +24,7 @@
 #include <stdbool.h>
 #include <math.h>
 #include <unistd.h>
+#include <assert.h>
 #ifdef __linux__
 #include <sys/sysinfo.h>
 #include <sys/resource.h>
@@ -35,7 +36,7 @@
 #define NAME_LENGTH    1024
 #define NUM_ITERATIONS 10
 #define MAX_DIM        4
-#define HYPER_VERBOSE  0
+#define HYPER_VERBOSE  1
 #define MIN(a, b)      (((a) < (b)) ? (a) : (b))
 #define MAX(a, b)      (((a) > (b)) ? (a) : (b))
 #define NUM_MOM        5
@@ -128,7 +129,6 @@ main(int argc, char *argv[])
     hsize_t memCount_dbl  = 1;
 
     /* Parse Input Args */
-    char *file_prefix = argv[0];
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--metacoll") == 0)
             useMetaDataCollectives = 1;
@@ -297,7 +297,7 @@ main(int argc, char *argv[])
     struct timeval time;
     gettimeofday(&time, NULL);
     srand(((unsigned int)time.tv_sec * 1000) + ((unsigned int)time.tv_usec / 1000));
-    sprintf(testFileName, "%s-hdf5TestFile-%d", file_prefix, rand());
+    sprintf(testFileName, "hdf5TestFile-%d", rand());
     MPI_Bcast(testFileName, NAME_LENGTH, MPI_CHAR, 0, comm);
     char dataSetName1[NAME_LENGTH] = "hdf5DataSet1";
 
@@ -348,7 +348,9 @@ main(int argc, char *argv[])
 
             BufSizeTotalDouble *= curNEls[j];
             BufSizeTotalDerived *= curNEls[j];
+            assert(NumDoubleElements * curNEls[j] < INT_MAX);
             NumDoubleElements *= curNEls[j];
+            assert(NumSimParamElements * curNEls[j] < INT_MAX);
             NumSimParamElements *= curNEls[j];
 
             /* Lets reset the block setting to default */

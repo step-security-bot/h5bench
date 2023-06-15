@@ -29,6 +29,8 @@ int str_to_ull(char *str_in, unsigned long long *num_out);
 int parse_time(char *str_in, duration *time);
 int parse_unit(char *str_in, unsigned long long *num, char **unit_str);
 
+int has_vol_async;
+
 unsigned long
 get_time_usec()
 {
@@ -65,13 +67,13 @@ h5bench_sleep(duration sleep_time)
 }
 
 void
-async_sleep(hid_t file_id, hid_t fapl, duration sleep_time)
+async_sleep(hid_t es_id, duration sleep_time)
 {
 #ifdef USE_ASYNC_VOL
-    unsigned cap = 0;
-    H5Pget_vol_cap_flags(fapl, &cap);
-    if (H5VL_CAP_FLAG_ASYNC & cap)
-        H5Fstart(file_id, fapl);
+    size_t  num_in_progress;
+    hbool_t op_failed;
+
+    H5ESwait(es_id, 0, &num_in_progress, &op_failed);
 #endif
     h5bench_sleep(sleep_time);
 }
@@ -179,15 +181,18 @@ ts_delayed_close(mem_monitor *mon, unsigned long *metadata_time_total, int dset_
     unsigned long t1, t2;
     unsigned long meta_time = 0;
 
-    if (mon->mode == ASYNC_NON)
+    if (!has_vol_async)
         return 0;
 
     for (int i = 0; i < mon->time_step_cnt; i++) {
         ts_run = &(mon->time_steps[i]);
         if (mon->time_steps[i].status == TS_DELAY) {
             t1 = get_time_usec();
-            for (int j = 0; j < dset_cnt; j++)
-                H5Dclose_async(ts_run->dset_ids[j], ts_run->es_meta_close);
+            for (int j = 0; j < dset_cnt; j++) {
+                if (ts_run->dset_ids[j] != 0) {
+                    H5Dclose_async(ts_run->dset_ids[j], ts_run->es_meta_close);
+                }
+            }
             H5Gclose_async(ts_run->grp_id, ts_run->es_meta_close);
             t2 = get_time_usec();
             meta_time += (t2 - t1);
@@ -205,7 +210,7 @@ mem_monitor_check_run(mem_monitor *mon, unsigned long *metadata_time_total, unsi
     *data_time_total     = 0;
     if (!mon || !metadata_time_total || !data_time_total)
         return -1;
-    if (mon->mode == ASYNC_NON)
+    if (!has_vol_async)
         return 0;
     time_step *   ts_run;
     size_t        num_in_progress;
@@ -255,13 +260,15 @@ mem_monitor_final_run(mem_monitor *mon, unsigned long *metadata_time_total, unsi
     unsigned long meta_time = 0, data_time = 0;
     int           dset_cnt = 8;
 
-    if (mon->mode == ASYNC_NON) {
+    if (!has_vol_async) {
         for (int i = 0; i < mon->time_step_cnt; i++) {
             ts_run = &(mon->time_steps[i]);
             if (mon->time_steps[i].status == TS_DELAY) {
-
-                for (int j = 0; j < dset_cnt; j++)
-                    H5Dclose_async(ts_run->dset_ids[j], ts_run->es_meta_close);
+                for (int j = 0; j < dset_cnt; j++) {
+                    if (ts_run->dset_ids[j] != 0) {
+                        H5Dclose_async(ts_run->dset_ids[j], ts_run->es_meta_close);
+                    }
+                }
                 H5Gclose_async(ts_run->grp_id, ts_run->es_meta_close);
             }
         }
@@ -275,8 +282,11 @@ mem_monitor_final_run(mem_monitor *mon, unsigned long *metadata_time_total, unsi
         ts_run = &(mon->time_steps[i]);
         if (mon->time_steps[i].status == TS_DELAY) {
 
-            for (int j = 0; j < dset_cnt; j++)
-                H5Dclose_async(ts_run->dset_ids[j], ts_run->es_meta_close);
+            for (int j = 0; j < dset_cnt; j++) {
+                if (ts_run->dset_ids[j] != 0) {
+                    H5Dclose_async(ts_run->dset_ids[j], ts_run->es_meta_close);
+                }
+            }
             H5Gclose_async(ts_run->grp_id, ts_run->es_meta_close);
 
             ts_run->status = TS_READY;
@@ -286,7 +296,7 @@ mem_monitor_final_run(mem_monitor *mon, unsigned long *metadata_time_total, unsi
     t2 = get_time_usec();
     meta_time += (t2 - t1);
 
-    if (mon->mode == ASYNC_NON)
+    if (!has_vol_async)
         return 0;
 
     for (int i = 0; i < mon->time_step_cnt; i++) {
@@ -322,38 +332,21 @@ hid_t
 es_id_set(async_mode mode)
 {
     hid_t es_id = 0;
-#ifdef USE_ASYNC_VOL
-    switch (mode) {
-        case ASYNC_NON:
-            es_id = H5ES_NONE;
-            break;
-        case ASYNC_EXPLICIT:
-            es_id = H5EScreate();
-            break;
-        case ASYNC_IMPLICIT:
-            break;
-        default:
-            break;
+    if (has_vol_async) {
+        es_id = H5EScreate();
     }
-#endif
+    else {
+        es_id = H5ES_NONE;
+    }
+
     return es_id;
 }
 
 void
 es_id_close(hid_t es_id, async_mode mode)
 {
-    switch (mode) {
-        case ASYNC_NON:
-            break;
-#ifdef USE_ASYNC_VOL
-        case ASYNC_EXPLICIT:
-            H5ESclose(es_id);
-            break;
-        case ASYNC_IMPLICIT:
-            break;
-#endif
-        default:
-            break;
+    if (has_vol_async) {
+        H5ESclose(es_id);
     }
 }
 
@@ -590,7 +583,8 @@ _set_io_pattern(bench_params *params_in_out)
             printf("%s() failed on line %d\n", __func__, __LINE__);
         }
     }
-    else if (params_in_out->io_op == IO_READ) { // file --> mem
+    else if ((params_in_out->io_op == IO_READ) || (params_in_out->io_op == IO_OVERWRITE) ||
+             (params_in_out->io_op == IO_APPEND)) { // file --> mem
         if (params_in_out->mem_pattern == PATTERN_CONTIG) {
             if (params_in_out->file_pattern == PATTERN_CONTIG) {
                 switch (params_in_out->num_dims) {
@@ -658,6 +652,12 @@ _set_params(char *key, char *val_in, bench_params *params_in_out, int do_write)
         }
         else if (strcmp(val, "WRITE") == 0) {
             params_in_out->io_op = IO_WRITE;
+        }
+        else if (strcmp(val, "OVERWRITE") == 0) {
+            params_in_out->io_op = IO_OVERWRITE;
+        }
+        else if (strcmp(val, "APPEND") == 0) {
+            params_in_out->io_op = IO_APPEND;
         }
         else {
             printf("Unknown value for \"IO_OPERATION\": %s\n", val);
@@ -892,24 +892,63 @@ _set_params(char *key, char *val_in, bench_params *params_in_out, int do_write)
     else if (strcmp(key, "ENV_METADATA_FILE") == 0) {
         (*params_in_out).env_meta_path = strdup(val);
     }
-    else if (strcmp(key, "ASYNC_MODE") == 0) {
-        if (val_in[0] == 'E')
-            (*params_in_out).asyncMode = ASYNC_EXPLICIT;
-        else if (val_in[0] == 'I')
-            (*params_in_out).asyncMode = ASYNC_IMPLICIT;
-        else
-            (*params_in_out).asyncMode = ASYNC_NON;
-    }
     else if (strcmp(key, "FILE_PER_PROC") == 0) {
         if (val[0] == 'Y' || val[0] == 'y')
             (*params_in_out).file_per_proc = 1;
         else
             (*params_in_out).file_per_proc = 0;
     }
+    else if (strcmp(key, "SUBFILING") == 0) {
+        if (val[0] == 'Y' || val[0] == 'y') {
+#ifndef HAVE_SUBFILING
+            printf("HDF5 version does not support SUBFILING \n");
+            return -1;
+#endif
+            (*params_in_out).subfiling = 1;
+        }
+        else
+            (*params_in_out).subfiling = 0;
+    }
+    else if (strcmp(key, "ALIGN") == 0) {
+        if (val[0] == 'Y' || val[0] == 'y') {
+            (*params_in_out).align = 1;
+        }
+        else {
+            (*params_in_out).align = 0;
+        }
+    }
+    else if (strcmp(key, "ALIGN_THRESHOLD") == 0) {
+        int align_threshold = atoi(val);
+        if (align_threshold >= 0)
+            (*params_in_out).align_threshold = align_threshold;
+        else {
+            printf("ALIGN_THRESHOLD must be >=0\n");
+            return -1;
+        }
+    }
+    else if (strcmp(key, "ALIGN_LEN") == 0) {
+        int align_len = atoi(val);
+        if (align_len >= 0)
+            (*params_in_out).align_len = align_len;
+        else {
+            printf("ALIGN_LEN must be >=0\n");
+            return -1;
+        }
+    }
     else {
         printf("Unknown Parameter: %s\n", key);
         return -1;
     }
+
+    has_vol_async = has_vol_connector();
+
+    if (has_vol_async) {
+        (*params_in_out).asyncMode = MODE_ASYNC;
+    }
+    else {
+        (*params_in_out).asyncMode = MODE_SYNC;
+    }
+
     if ((*params_in_out).useCSV)
         (*params_in_out).csv_fs = csv_init(params_in_out->csv_path, params_in_out->env_meta_path);
 
@@ -925,7 +964,8 @@ bench_params_init(bench_params *params_out)
     (*params_out).pattern_name = NULL;
     (*params_out).meta_coll    = 0;
     (*params_out).data_coll    = 0;
-    (*params_out).asyncMode    = ASYNC_NON;
+    (*params_out).asyncMode    = MODE_SYNC;
+    (*params_out).subfiling    = 0;
 
     (*params_out).cnt_time_step         = 0;
     (*params_out).cnt_time_step_delay   = 0;
@@ -947,11 +987,29 @@ bench_params_init(bench_params *params_out)
     (*params_out).csv_path      = NULL;
     (*params_out).env_meta_path = NULL;
 
-    (*params_out).csv_path      = NULL;
-    (*params_out).csv_fs        = NULL;
-    (*params_out).env_meta_path = NULL;
-    (*params_out).file_per_proc = 0;
+    (*params_out).csv_path        = NULL;
+    (*params_out).csv_fs          = NULL;
+    (*params_out).env_meta_path   = NULL;
+    (*params_out).file_per_proc   = 0;
+    (*params_out).align           = 0;
+    (*params_out).align_threshold = 0;
+    (*params_out).align_len       = 0;
 }
+
+int
+has_vol_connector()
+{
+#if H5_VERSION_GE(1, 13, 0)
+    char *connector = getenv("HDF5_VOL_CONNECTOR");
+
+    if (connector != NULL && strstr(connector, "async")) {
+        return 1;
+    }
+#endif
+
+    return 0;
+}
+
 int
 read_config(const char *file_path, bench_params *params_out, int do_write)
 {
@@ -1003,6 +1061,12 @@ read_config(const char *file_path, bench_params *params_out, int do_write)
     if (ret < 0)
         return ret;
 
+    if (params_out->io_op == IO_WRITE || params_out->io_op == IO_OVERWRITE ||
+        params_out->io_op == IO_APPEND ||
+        (params_out->io_op == IO_READ && params_out->try_num_particles == 0)) {
+        (*params_out).num_particles = params_out->dim_1 * params_out->dim_2 * params_out->dim_3;
+    }
+
     if (params_out->io_mem_limit > 0) {
         if (params_out->num_particles * PARTICLE_SIZE >= params_out->io_mem_limit) {
             printf("Requested memory (%llu particles, %llu, PARTICLE_SIZE = %ld) is larger than specified "
@@ -1021,7 +1085,8 @@ read_config(const char *file_path, bench_params *params_out, int do_write)
             }
         }
     }
-    else if (params_out->io_op == IO_READ) {                        // read
+    else if ((params_out->io_op == IO_READ) || (params_out->io_op == IO_OVERWRITE) ||
+             (params_out->io_op == IO_APPEND)) {                    // read-based operations
         if (params_out->access_pattern.pattern_read == CONTIG_1D) { // read whole file
             if (params_out->num_particles > 1)
                 params_out->try_num_particles = params_out->num_particles;
@@ -1035,6 +1100,11 @@ read_config(const char *file_path, bench_params *params_out, int do_write)
             }
         }
     }
+    if (params_out->subfiling > 0 && params_out->data_coll == 1) {
+        printf("Subfiling does not support collective data buffering for data.\n");
+        return -1;
+    }
+
     return 0;
 }
 
@@ -1042,26 +1112,19 @@ read_config(const char *file_path, bench_params *params_out, int do_write)
 void
 print_params(const bench_params *p)
 {
-    printf("=======================================\n");
-    printf("Benchmark configuration: \nFile: %s\n", p->data_file_path);
+    printf("\n");
+    printf("================ Benchmark Configuration ==================\n");
+    printf("File: %s\n", p->data_file_path);
     printf("Number of particles per rank: %llu\n", p->num_particles);
-    // printf("Per rank actual read number (in M): %d M\n", p->cnt_actual_particles_M);
     printf("Number of time steps: %d\n", p->cnt_time_step);
     printf("Emulated compute time per timestep: %lu\n", p->compute_time.time_num);
-    int asyncMode = p->asyncMode;
-#ifndef USE_ASYNC_VOL
-    asyncMode = 0;
-#endif
-    printf("Async mode = %d (0: ASYNC_NON; 1: ASYNC_EXP; 2: ASYNC_IMP)\n", asyncMode);
-    if (p->meta_coll == 1)
-        printf("Collective metadata operations: YES.\n");
-    else
-        printf("Collective metadata operations: NO.\n");
-    if (p->data_coll == 1)
-        printf("Collective buffering for data operations: YES.\n");
-    else
-        printf("Collective buffering for data operations: NO.\n");
 
+    printf("Mode: %s\n", p->asyncMode == MODE_SYNC ? "SYNC" : "ASYNC");
+    printf("Collective metadata operations: %s\n", p->meta_coll == 1 ? "YES" : "NO");
+    printf("Collective buffering for data operations: %s\n", p->data_coll == 1 ? "YES" : "NO");
+    if (p->subfiling) {
+        printf("Use Subfiling: %s\n", p->subfiling == 1 ? "YES" : "NO");
+    }
     printf("Number of dimensions: %d\n", p->num_dims);
     printf("    Dim_1: %lu\n", p->dim_1);
     if (p->num_dims >= 2) {
@@ -1088,8 +1151,14 @@ print_params(const bench_params *p)
             printf("    chunk_dim3: %lu\n", p->chunk_dim_3);
         }
     }
-
-    printf("=======================================\n");
+    if (p->align) {
+        printf("Align settings: \n");
+        printf("    align  = %d\n", p->align);
+        printf("    align threshold = %ld\n", p->align_threshold);
+        printf("    align length = %ld\n", p->align_len);
+    }
+    printf("===========================================================\n");
+    printf("\n");
 }
 
 void
@@ -1254,4 +1323,26 @@ get_dir_from_path(char *path)
     char *pDir = substr(path, 0, strlen(path) - strlen(get_file_name_from_path(path)));
 
     return pDir;
+}
+
+human_readable
+format_human_readable(uint64_t bytes)
+{
+    human_readable value;
+
+    char unit[] = {' ', 'K', 'M', 'G', 'T'};
+    char length = sizeof(unit) / sizeof(unit[0]);
+
+    int    i      = 0;
+    double format = bytes;
+
+    if (bytes >= 1024) {
+        for (i = 0; (bytes / 1024) > 0 && i < length - 1; i++, bytes /= 1024)
+            format = bytes / 1024.0;
+    }
+
+    value.value = format;
+    value.unit  = unit[i];
+
+    return value;
 }

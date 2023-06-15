@@ -13,7 +13,6 @@ You can configure the ``h5bench_write`` and ``h5bench_read`` benchmarks with the
 ======================================= ==========================================================
 ``MEM_PATTERN``                         Options: ``CONTIG``, ``INTERLEAVED``, and ``STRIDED``   
 ``FILE_PATTERN``                        Options: ``CONTIG`` and ``STRIDED``                     
-``NUM_PARTICLES``                       The number of particles that each rank needs to process 
 ``TIMESTEPS``                           The number of iterations                                
 ``EMULATED_COMPUTE_TIME_PER_TIMESTEP``  Sleeps after each iteration to emulate computation      
 ``NUM_DIMS``                            The number of dimensions, valid values are 1, 2 and 3   
@@ -26,11 +25,9 @@ For ``MEM_PATTERN``, ``CONTIG`` represents arrays of basic data types (i.e., int
 
 For ``FILE_PATTERN``, ``CONTIG`` represents a HDF5 dataset of basic data types (i.e., int, float, double, etc.); ``INTERLEAVED`` represents a dataset of a compound datatype;
 
-For ``NUM_PARTICLES``, you can use absolute numbers (e.g. ``12345``) or in units (e.g. ``16 K``, ``128 M``, or ``256 G``). Notice that you `must` provide a space between the number and unit.
-
 For ``EMULATED_COMPUTE_TIME_PER_TIMESTEP``, you `must` provide the time unit (e.g. ``10 s``, ``100 ms``, or ``5000us``) to ensure correct behavior.
 
-For ``DIM_2`` and ``DIM_3`` if **unused**, you should set both as ``1``. Notice that ``NUM_PARTICLES == DIM_1 * DIM_2 * DIM_3`` **must** hold. For example, ``DIM_1=1024``, ``DIM_2=256``, ``DIM_3=1`` is a valid setting for a 2D array when ``NUM_PARTICLES=262144`` or ``NUM_PARTICLES=256 K``.
+For ``DIM_2`` and ``DIM_3`` if **unused**, you should set both as ``1``. Notice that the total number of particles will be given by ``DIM_1 * DIM_2 * DIM_3``. For example, ``DIM_1=1024``, ``DIM_2=256``, ``DIM_3=1`` is a valid setting for a 2D array and it will generate ``262144`` particles.
 
 A set of sample configuration files can be found in the ``samples/`` diretory in GitHub.
 
@@ -52,12 +49,14 @@ Asynchronous Settings
 ======================================= ==========================================================
 **Parameter**                           **Description**                                         
 ======================================= ==========================================================
-``ASYNC_MODE``                          Options: ``NON`` (default), ``IMP``, and ``EXP``        
+``MODE``                                Options: ``SYNC`` or ``ASYNC``        
 ``IO_MEM_LIMIT``                        Memory threshold to determine when to execute I/O       
 ``DELAYED_CLOSE_TIMESTEPS``             Groups and datasets will be closed later.               
 ======================================= ==========================================================
 
-The ``IO_MEM_LIMIT`` parameter is optional. Its default value is ``0`` and it requires ``ASYNC_MODE=EXP``. It also only works in asynchronous mode. This is the memory threshold used to determine when to actually execute the I/O operations. The actual I/O operations (data read/write) will not be executed until the timesteps associated memory reachs the threshold, or the application run to the end.
+The ``IO_MEM_LIMIT`` parameter is optional. Its default value is ``0`` and it requires ``ASYNC``, i.e., it only works in asynchronous mode. This is the memory threshold used to determine when to actually execute the I/O operations. The actual I/O operations (data read/write) will not be executed until the timesteps associated memory reachs the threshold, or the application run to the end.
+
+For the ``ASYNC`` mode to work you **must** define the necessay HDF5 ASYNC-VOL connector. For more information about it, refer to its `documentation <https://hdf5-vol-async.readthedocs.io/en/latest/>`_.
 
 Compression Settings
 ^^^^^^^^^^^^^^^^^^^^
@@ -88,6 +87,19 @@ Collective Operation Settings
 ======================================= ==========================================================
 
 Both ``COLLECTIVE_DATA`` and ``COLLECTIVE_METADATA`` parameters are optional.
+
+Subfiling Settings
+^^^^^^^^^^^^^^^^^^
+
+======================================= ==========================================================
+**Parameter**                           **Description**                                         
+======================================= ==========================================================
+``SUBFILING``                           Enables HDF5 subfiling (default is ``NO``)  
+======================================= ==========================================================
+
+.. attention:: 
+
+	In order to enable this option your HDF5 must have been compiled with support for the HDF5 Subfiling Virtual File Driver (VFD) which was introduced in the HDF5 1.14.0. For CMake you can use the ``-DHDF5_ENABLE_PARALLEL=ON -DHDF5_ENABLE_SUBFILING_VFD=ON`` and for autotools ``--enable-parallel --enable-subfiling-vfd=yes``. Without this support, this parameter has no effect.
 
 CSV Settings
 ^^^^^^^^^^^^

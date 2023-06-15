@@ -11,41 +11,55 @@ If you prefer, you can also manually run each benchmark in h5bench. For more det
 
 .. code-block::
 
-   usage: h5bench [-h] [--debug] setup
+   usage: h5bench [-h] [-a] [-d] [-v] [-p PREFIX] [-f FILTER] [-V] setup
 
    H5bench: a Parallel I/O Benchmark Suite for HDF5:
 
    positional arguments:
-     setup       JSON file with the benchmarks to run
+     setup                          JSON file with the benchmarks to run
 
-   optional arguments:
-     -h, --help  show this help message and exit
-     --debug     Enable debug mode
-
+   options:
+     -h, --help                     Show this help message and exit
+     -a, --abort-on-failure         Stop h5bench if a benchmark failed
+     -d, --debug                    Enable debug mode
+     -v, --validate-mode            Validated if the requested mode (async/sync) was run
+     -p PREFIX, --prefix PREFIX     Prefix where all h5bench binaries were installed
+     -f FILTER, --filter FILTER     Execute only filtered benchmarks
+     -V, --version                  Show program's version number and exit
 
 You need to provide a JSON file with the configurations you want to run.
-If you're using `h5bench`, you should *not* call `mpirun`, `srun`, or any other parallel launcher on your own. 
+If you're using ``h5bench``, you should *not* call ``mpirun``, ``srun``, or any other parallel launcher on your own. 
 Refer to the manual execution section if you want to follow that approach instead. 
 The main script will handle setting and unsetting environment variables, launching the benchmarks with the provided configuration and HDF5 VOL connectors.
 
 .. code-block::
 
-   ./h5bench configuration.json
+   h5bench configuration.json
 
-If you run it with the `--debug` option, h5bench will also print log messages `stdout`. The default behavior is to store it in a file. 
+If you run it with the ``--debug`` option, h5bench will also print log messages ``stdout``. The default behavior is to store it in a file. 
+
+.. warning::
+
+   Make sure you do not call `srun`, `mpirun`, etc directly but instead define that in the JSON configuration file. You should **always** call h5bench directly.  
+
+You can define a single `.json` file with a complete setup and a combination of kernels you want to run. You can filter which of those benchmarks `h5bench` should run by passing the `--filter` option when running. For instance, the following command will only run the `read`, and `openpmd` kernels defined in the `.json`. The remaining ones would be ignored.
+
+.. code-block::
+
+   h5bench --filter read,openpmd configuration.json
 
 Configuration
 -------------
 
-The JSON configuration file has five main properties: `mpi`, `vol`, `file-system`, `directory`, `benchmarks`. 
+The JSON configuration file has five main properties: ``mpi``, ``vol``, ``file-system``, ``directory``, ``benchmarks``. All should be defined, even if empty.
 
 
 MPI
 ^^^
 
-You can set the MPI launcher you want to use, e.g. `mpirun`, `mpiexec`, and `srun`,
+You can set the MPI launcher you want to use, e.g. ``mpirun``, ``mpiexec``, and ``srun``,
 and provide the number of processes you want to use.
-For other methods or a fine grain control on the job configuration, you can define the `configuration` properties that h5bench will use to launch the experiments using the `command` property you provided. If the `configuration` option is defined, h5bench will ignore the `ranks` property.
+For other methods or a fine grain control on the job configuration, you can define the ``configuration`` properties that h5bench will use to launch the experiments using the ``command`` property you provided. If the ``configuration`` option is defined, h5bench will ignore the ``ranks`` property.
 
 .. code-block::
 
@@ -58,7 +72,7 @@ For other methods or a fine grain control on the job configuration, you can defi
 VOL
 ^^^
 
-You can use HDF5 VOL connectors (async, cache, etc) for `h5bench_write` and `h5bench_read`.
+You can use HDF5 VOL connectors (async, cache, etc) for ``h5bench_write`` and ``h5bench_read``.
 Because some benchmarks inside h5bench do not have support for VOL connectors yet, you need to provide the necessary information in the configuration file to handle the VOL setup during runtime.
 
 .. code-block::
@@ -69,7 +83,7 @@ Because some benchmarks inside h5bench do not have support for VOL connectors ye
       "connector": "async under_vol=0;under_info={}"
    }
 
-You should provide the absolute path for all the libraries required by the VOL connector using the `library` property, the `path` of the VOL connector, and the configuration in `connector`. The provided example depicts how to configure the HDF5 VOL async connector.
+You should provide the absolute path for all the libraries required by the VOL connector using the ``library`` property, the ``path`` of the VOL connector, and the configuration in ``connector``. The provided example depicts how to configure the HDF5 VOL async connector.
 
 Directory
 ^^^^^^^^^
@@ -84,7 +98,7 @@ Additional options such as data striping for Lustre, if configured, will be appl
 File System
 ^^^^^^^^^^^
 
-You can use this property to configure some file system options. For now, you can use it for Lustre to define the striping count and size that should be applied to the `directory` that will store all the generated data from `h5bench`.
+You can use this property to configure some file system options. For now, you can use it for Lustre to define the striping count and size that should be applied to the ``directory`` that will store all the generated data from ``h5bench``.
 
 .. code-block::
 
@@ -98,94 +112,119 @@ You can use this property to configure some file system options. For now, you ca
 Benchmarks
 ^^^^^^^^^^
 
-You can specify which benchmarks `h5bench` should run in this property, their order, and configuration.
-You can choose between: `write`, `read`, `metadata`, and `exerciser`. 
+You can specify which benchmarks ``h5bench`` should run using this property, their order, and configuration.
+You can choose between: ``write``, ``write-unlimited``, ``overwrite``, ``append``, ``read``, ``metadata``, ``exerciser``, ``openpmd``, ``amrex``, ``e3sm``. 
 
-For the `write` pattern of `h5bench`, you should provide the `file` and the `configuration`:
+For each pattern of ``h5bench``, you should provide the ``file`` and the ``configuration``:
 
 .. code-block::
 
    {
-      "write": {
-         "file": "test.h5",
-         "configuration": {
+      "benchmark": "write",
+      "file": "test.h5",
+      "configuration": {
+         "MEM_PATTERN": "CONTIG",
+         "FILE_PATTERN": "CONTIG",
+         "NUM_PARTICLES": "16 M",
+         "TIMESTEPS": "5",
+         "DELAYED_CLOSE_TIMESTEPS": "2",
+         "COLLECTIVE_DATA": "NO",
+         "COLLECTIVE_METADATA": "NO",
+         "EMULATED_COMPUTE_TIME_PER_TIMESTEP": "1 s", 
+         "NUM_DIMS": "1",
+         "DIM_1": "16777216",
+         "DIM_2": "1",
+         "DIM_3": "1",
+         "MODE": "SYNC",
+         "CSV_FILE": "output.csv"
+      }
+   }
+
+If you provide the same ``file`` name used for a previous ``write`` execution, it will read from that file.
+This way, you can configure a workflow with multiple interleaving files, e.g., ``write`` file-01, ``write`` file-02, ``read`` file-02, ``read`` file-01.
+
+.. code-block::
+
+   {
+      "benchmark": "read": {
+      "file": "test.h5",
+      "configuration": {
+         "MEM_PATTERN": "CONTIG",
+         "FILE_PATTERN": "CONTIG",
+         "NUM_PARTICLES": "16 M",
+         "TIMESTEPS": "5",
+         "DELAYED_CLOSE_TIMESTEPS": "2",
+         "COLLECTIVE_DATA": "NO",
+         "COLLECTIVE_METADATA": "NO",
+         "EMULATED_COMPUTE_TIME_PER_TIMESTEP": "1 s", 
+         "NUM_DIMS": "1",
+         "DIM_1": "16777216",
+         "DIM_2": "1",
+         "DIM_3": "1",
+         "MODE": "SYNC",
+         "CSV_FILE": "output.csv"
+      }
+   }
+
+You can also provide the ``align`` settings for GPFS filesystem in the ``benchmark`` property configuration. Note, not in the ``filesystem`` property.  
+This parameter is enabled only for h5bench-write and h5bench-write-unlimited.
+
+
+.. code-block::
+
+   {
+      "benchmark": "write",
+      "file": "test.h5",
+      "configuration": {
             "MEM_PATTERN": "CONTIG",
             "FILE_PATTERN": "CONTIG",
-            "NUM_PARTICLES": "16 M",
             "TIMESTEPS": "5",
             "DELAYED_CLOSE_TIMESTEPS": "2",
-            "COLLECTIVE_DATA": "NO",
-            "COLLECTIVE_METADATA": "NO",
+            "COLLECTIVE_DATA": "YES",
+            "COLLECTIVE_METADATA": "YES",
             "EMULATED_COMPUTE_TIME_PER_TIMESTEP": "1 s", 
             "NUM_DIMS": "1",
-            "DIM_1": "16777216",
+            "DIM_1": "4194304",
             "DIM_2": "1",
             "DIM_3": "1",
-            "ASYNC_MODE": "NON",
-            "CSV_FILE": "output.csv"
-         }
+            "MODE": "ASYNC",
+            "CSV_FILE": "output.csv",
+            "ALIGN":"YES",
+            "ALIGN_THRESHOLD":"16777216",
+            "ALIGN_LEN":"16777216"
       }
    }
 
-For the `read` pattern of `h5bench`, you should provide the `file` and the `configuration`. 
-If you provide the same `file` name used for a previous `write` execution, it will read from that file.
-This way, you can configure a workflow with multiple interleaving files, e.g., `write` file-01, `write` file-02, `read` file-02, `read` file-01.
+For the ``metadata`` stress benchmark, ``file`` and ``configuration`` properties must be defined:
 
 .. code-block::
 
    {
-      "read": {
-         "file": "test.h5",
-         "configuration": {
-            "MEM_PATTERN": "CONTIG",
-            "FILE_PATTERN": "CONTIG",
-            "NUM_PARTICLES": "16 M",
-            "TIMESTEPS": "5",
-            "DELAYED_CLOSE_TIMESTEPS": "2",
-            "COLLECTIVE_DATA": "NO",
-            "COLLECTIVE_METADATA": "NO",
-            "EMULATED_COMPUTE_TIME_PER_TIMESTEP": "1 s", 
-            "NUM_DIMS": "1",
-            "DIM_1": "16777216",
-            "DIM_2": "1",
-            "DIM_3": "1",
-            "ASYNC_MODE": "NON",
-            "CSV_FILE": "output.csv"
-         }
+      "benchmark": "metadata",
+      "file": "hdf5_iotest.h5",
+      "configuration": {
+         "version": "0",
+         "steps": "20",
+         "arrays": "500",
+         "rows": "100",
+         "columns": "200",
+         "process-rows": "2",
+         "process-columns": "2",
+         "scaling": "weak",
+         "dataset-rank": "4",
+         "slowest-dimension": "step",
+         "layout": "contiguous",
+         "mpi-io": "independent",       
+         "csv-file": "hdf5_iotest.csv"
       }
    }
 
-For the `metadata stress benchmark, `file` and `configuration` properties must be defined:
+For the ``exerciser`` benchmark, you need to provide the required runtime options in the JSON file inside the ``configuration`` property.
 
 .. code-block::
 
    {
-      "metadata": {
-         "file": "hdf5_iotest.h5",
-         "configuration": {
-            "version": "0",
-            "steps": "20",
-            "arrays": "500",
-            "rows": "100",
-            "columns": "200",
-            "process-rows": "2",
-            "process-columns": "2",
-            "scaling": "weak",
-            "dataset-rank": "4",
-            "slowest-dimension": "step",
-            "layout": "contiguous",
-            "mpi-io": "independent",       
-            "csv-file": "hdf5_iotest.csv"
-         }
-      }
-   }
-
-For the `exerciser` benchmark, you need to provide the required runtime options in the JSON file inside the `configuration` property.
-
-.. code-block::
-
-   {
-      "exerciser": {
+      "benchmark": "exerciser",
       "configuration": {
          "numdims": "2",
          "minels": "8 8",
@@ -195,14 +234,14 @@ For the `exerciser` benchmark, you need to provide the required runtime options 
       }
    }
 
-You can refer to this sample of a complete `configuration.json` file that defined the workflow of the execution of multiple benchmarks from h5bench Suite:
+You can find several samples of configuration file with all the optins in the our [GitHub repository] (https://github.com/hpc-io/h5bench/tree/master/samples). You can also refer to this sample of a complete ``configuration.json`` file that defined the workflow of the execution of multiple benchmarks from h5bench Suite:
 
 .. literalinclude:: ../../configuration.json
    :language: json
 
 For a description of all the options available in each benchmark, please refer to their entries in the documentation.
 
-When the `--debug` option is enabled, you can expect an output similar to:
+When the ``--debug`` option is enabled, you can expect an output similar to:
 
 .. code-block::
 
@@ -223,14 +262,42 @@ When the `--debug` option is enabled, you can expect an output similar to:
    2021-10-25 16:31:49,174 h5bench - INFO - SUCCESS
    2021-10-25 16:31:49,174 h5bench - INFO - Finishing h5bench Suite
 
-Cori
-^^^^
+Cori (NERSC)
+^^^^^^^^^^^^
 
-In case you are running on Cori and the benchmark fails with an MPI message indicating no support for multiple threads, make sure you define:
+In Cori you need to load Python and its libraries for the main ``h5bench`` script to work. For manual execution of each benchmark that is not required. 
+
+.. code-block::
+
+   module load python
+
+In case you are running on Cori and the benchmark fails with an MPI message indicating no support for multiple threads:
+
+.. code-block::
+
+   Assertion `MPI_THREAD_MULTIPLE == mpi_thread_lvl_p rovided' failed.
+
+Please, make sure you define the following:
 
 .. code-block::
 
    export MPICH_MAX_THREAD_SAFETY="multiple" 
+   
+Sunspot (ALCF)
+^^^^^^^^^^^^^^
+
+In Sunspot you need to export one additional enviroment variable related to ATS. ATS is the Address Translation Service support for using the IOMMU (Input–Output Memory Management Unit) for address translation. ATS is not supported on Intel processors at this time. The default is to NTA (NIC translation).
+
+.. code-block::
+
+   export FI_CXI_ATS=0 
+
+Otherwise you will encounter the following error:
+
+.. code-block::
+
+   libfabric:36807:1674015247::cxi:core:cxip_fc_notify_cb():4366<warn>
+   x1922c0s5b0n0: TXC (0x1081:5:0):: Fatal, unexpected event rc: 26
 
 -----------------------------------
 Manual Execution
@@ -238,4 +305,4 @@ Manual Execution
 
 If you prefer, you can execute each benchmark manually. In this scenario, you will be responsible for generating the input configuration file needed for each benchmark in the suite, ensuring it follows the pre-defined format unique for each one. 
 
-If you want to use HDF5 VOL connectors or tune the file system configuration, `h5bench` will *not* take care of that. Remember that not all benchmarks in the suite have support for VOL connectors yet.
+If you want to use HDF5 VOL connectors or tune the file system configuration, ``h5bench`` will *not* take care of that. Remember that not all benchmarks in the suite have support for VOL connectors yet.

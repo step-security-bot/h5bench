@@ -19,7 +19,7 @@
 #define M_VAL            ((unsigned long long)1024 * 1024)
 #define K_VAL            ((unsigned long long)1024)
 #define PARTICLE_SIZE    (7 * sizeof(float) + sizeof(int))
-typedef enum async_mode { ASYNC_NON, ASYNC_EXPLICIT, ASYNC_IMPLICIT } async_mode;
+typedef enum async_mode { MODE_SYNC, MODE_ASYNC } async_mode;
 
 typedef enum num_unit {
     UNIT_INVALID,
@@ -36,6 +36,11 @@ typedef enum time_unit {
     TIME_MS,
     TIME_US,
 } time_unit;
+
+typedef struct human_readable {
+    double value;
+    char   unit;
+} human_readable;
 
 typedef struct duration {
     unsigned long time_num;
@@ -76,6 +81,8 @@ typedef enum io_operation {
     IO_INVALID,
     IO_READ,
     IO_WRITE,
+    IO_OVERWRITE,
+    IO_APPEND,
 } io_operation;
 
 typedef enum read_option { READ_OPTION_INVALID, READ_FULL, READ_PARTIAL, READ_STRIDED } read_option;
@@ -88,6 +95,7 @@ typedef struct bench_params {
     int          useCompress;
     int          useCSV;
     async_mode   asyncMode;
+    int          subfiling;
     union access_pattern {
         read_pattern  pattern_read;
         write_pattern pattern_write;
@@ -119,6 +127,9 @@ typedef struct bench_params {
     char *        env_meta_path;
     FILE *        csv_fs;
     int           file_per_proc;
+    int           align;
+    unsigned long align_threshold;
+    unsigned long align_len;
 } bench_params;
 
 typedef struct data_md {
@@ -160,7 +171,7 @@ typedef struct mem_monitor {
 unsigned long long read_time_val(duration time, time_unit unit);
 
 void h5bench_sleep(duration sleep_time);
-void async_sleep(hid_t file_id, hid_t fapl, duration sleep_time);
+void async_sleep(hid_t es_id, duration sleep_time);
 
 void timestep_es_id_close(time_step *ts, async_mode mode);
 
@@ -189,6 +200,9 @@ int read_config(const char *file_path, bench_params *params_out, int do_write);
 
 void print_params(const bench_params *p);
 void bench_params_free(bench_params *p);
+int  has_vol_connector();
+
+extern int has_vol_async;
 
 int   file_create_try(const char *path);
 int   file_exist(const char *path);
@@ -201,5 +215,7 @@ int argv_print(int argc, char *argv[]);
 
 char *get_file_name_from_path(char *path);
 char *get_dir_from_path(char *path);
+
+human_readable format_human_readable(uint64_t bytes);
 
 #endif /* COMMONS_H5BENCH_UTIL_H_ */
