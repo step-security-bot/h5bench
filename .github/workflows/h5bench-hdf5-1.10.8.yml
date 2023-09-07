@@ -9,6 +9,9 @@ on:
     branches:
       - master
 
+permissions:
+  contents: read
+
 jobs:
   h5bench:
     runs-on: ubuntu-20.04
@@ -20,7 +23,12 @@ jobs:
       OMPI_ALLOW_RUN_AS_ROOT_CONFIRM: 1
 
     steps:
-      - uses: actions/checkout@v1
+      - name: Harden Runner
+        uses: step-security/harden-runner@8ca2b8b2ece13480cda6dacd3511b49857a23c09 # v2.5.1
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@50fbc622fc4ef5163becd7fab6573eac35f8462e # v1.2.0
         with:
           submodules: true
 
@@ -219,11 +227,11 @@ jobs:
 
       - name: Setup tmate session
         if: ${{ failure() }}
-        uses: mxschmitt/action-tmate@v3
+        uses: mxschmitt/action-tmate@53a5c23a925969671a6bb98ea70a4f650928ef93 # v3.16
 
       - name: Upload artifact
         if: always()
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@82c141cc518b40d92cc801eee768e7aafc9c2fa2 # v2.3.1
         with:
           name: test
           path: build/storage/**/std*

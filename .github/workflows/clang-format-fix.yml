@@ -8,9 +8,9 @@ jobs:
     runs-on: ubuntu-latest
     if: "!contains(github.event.head_commit.message, 'skip-ci')"
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@ee0669bd1cc54295c223e0bb666b733df41de1c5 # v2.7.0
     - name: Run clang-format style check for C programs.
-      uses: DoozyX/clang-format-lint-action@v0.11
+      uses: DoozyX/clang-format-lint-action@84b814a54950e27ac65a62069802df099405ef77 # v0.11
       with:
         source: '.'
         extensions: 'c,h,cpp,hpp'
@@ -18,7 +18,7 @@ jobs:
         inplace: True
         style: file
         # exclude: './config '
-    - uses: EndBug/add-and-commit@v7
+    - uses: EndBug/add-and-commit@8c12ff729a98cfbcd3fe38b49f55eceb98a5ec02 # v7.5.0
       with:
           author_name: github-actions
           author_email: github-actions[bot]@users.noreply.github.com
