@@ -32,7 +32,7 @@ jobs:
       - name: Dependencies
         run: |
           # VOL-ASYNC
-          git clone --recursive https://github.com/hpc-io/vol-async.git /opt/vol-async
+          git clone --recursive https://github.com/hpc-io/vol-async.git --branch v1.7 /opt/vol-async
 
       - name: Build Argobots
         run: |
@@ -56,7 +56,7 @@ jobs:
           mkdir build
           cd build
 
-          cmake .. -DCMAKE_INSTALL_PREFIX=$ASYNC_DIR -DCMAKE_PREFIX_PATH=$HDF5_DIR
+          cmake .. -DCMAKE_INSTALL_PREFIX=$ASYNC_DIR -DCMAKE_PREFIX_PATH=$HDF5_DIR -DENABLE_WRITE_MEMCPY=ON
           make
           make install
 
@@ -87,7 +87,8 @@ jobs:
           cmake .. \
             -DH5BENCH_ALL=ON
           make -j 2
-          make install
+          sudo make install
+          ldconfig
 
       - name: Build h5bench ASYNC
         run: |
@@ -105,7 +106,8 @@ jobs:
             -DCMAKE_C_FLAGS="-I$ASYNC_HOME/include -L$ASYNC_HOME/lib" \
             -DH5BENCH_ALL=ON
           make -j 2
-          make install
+          sudo make install
+          ldconfig
 
       - name: Test h5bench SYNC write/read
         run: |
@@ -287,6 +289,7 @@ jobs:
           export HDF5_DIR=/opt/hdf5
           export ABT_DIR=/opt/argobots
           export ASYNC_DIR=/opt/vol-async
+          export HDF5_ASYNC_MAX_MEM_MB=1024
 
           cd build-async
 
@@ -299,6 +302,7 @@ jobs:
           export HDF5_DIR=/opt/hdf5
           export ABT_DIR=/opt/argobots
           export ASYNC_DIR=/opt/vol-async
+          export HDF5_ASYNC_MAX_MEM_MB=1024
 
           cd build-async
 
@@ -311,6 +315,7 @@ jobs:
           export HDF5_DIR=/opt/hdf5
           export ABT_DIR=/opt/argobots
           export ASYNC_DIR=/opt/vol-async
+          export HDF5_ASYNC_MAX_MEM_MB=1024
 
           cd build-async
 
@@ -323,6 +328,7 @@ jobs:
           export HDF5_DIR=/opt/hdf5
           export ABT_DIR=/opt/argobots
           export ASYNC_DIR=/opt/vol-async
+          export HDF5_ASYNC_MAX_MEM_MB=1024
 
           cd build-async
 
@@ -335,6 +341,7 @@ jobs:
           export HDF5_DIR=/opt/hdf5
           export ABT_DIR=/opt/argobots
           export ASYNC_DIR=/opt/vol-async
+          export HDF5_ASYNC_MAX_MEM_MB=1024
 
           cd build-async
 
@@ -347,6 +354,7 @@ jobs:
           export HDF5_DIR=/opt/hdf5
           export ABT_DIR=/opt/argobots
           export ASYNC_DIR=/opt/vol-async
+          export HDF5_ASYNC_MAX_MEM_MB=1024
 
           cd build-async
 
@@ -359,6 +367,7 @@ jobs:
           export HDF5_DIR=/opt/hdf5
           export ABT_DIR=/opt/argobots
           export ASYNC_DIR=/opt/vol-async
+          export HDF5_ASYNC_MAX_MEM_MB=1024
 
           cd build-async
 
@@ -373,6 +382,7 @@ jobs:
           export HDF5_DIR=/opt/hdf5
           export ABT_DIR=/opt/argobots
           export ASYNC_DIR=/opt/vol-async
+          export HDF5_ASYNC_MAX_MEM_MB=1024
 
           cd build-async
 
@@ -385,6 +395,7 @@ jobs:
           export HDF5_DIR=/opt/hdf5
           export ABT_DIR=/opt/argobots
           export ASYNC_DIR=/opt/vol-async
+          export HDF5_ASYNC_MAX_MEM_MB=1024
 
           cd build-async
 
@@ -397,6 +408,7 @@ jobs:
           export HDF5_DIR=/opt/hdf5
           export ABT_DIR=/opt/argobots
           export ASYNC_DIR=/opt/vol-async
+          export HDF5_ASYNC_MAX_MEM_MB=1024
 
           cd build-async
 
@@ -409,6 +421,7 @@ jobs:
           export HDF5_DIR=/opt/hdf5
           export ABT_DIR=/opt/argobots
           export ASYNC_DIR=/opt/vol-async
+          export HDF5_ASYNC_MAX_MEM_MB=1024
 
           cd build-async
 
@@ -421,6 +434,7 @@ jobs:
           export HDF5_DIR=/opt/hdf5
           export ABT_DIR=/opt/argobots
           export ASYNC_DIR=/opt/vol-async
+          export HDF5_ASYNC_MAX_MEM_MB=1024
 
           cd build-async
 
@@ -433,6 +447,7 @@ jobs:
           export HDF5_DIR=/opt/hdf5
           export ABT_DIR=/opt/argobots
           export ASYNC_DIR=/opt/vol-async
+          export HDF5_ASYNC_MAX_MEM_MB=1024
 
           cd build-async
 
@@ -445,6 +460,7 @@ jobs:
           export HDF5_DIR=/opt/hdf5
           export ABT_DIR=/opt/argobots
           export ASYNC_DIR=/opt/vol-async
+          export HDF5_ASYNC_MAX_MEM_MB=1024
 
           cd build-async
 
@@ -457,6 +473,7 @@ jobs:
           export HDF5_DIR=/opt/hdf5
           export ABT_DIR=/opt/argobots
           export ASYNC_DIR=/opt/vol-async
+          export HDF5_ASYNC_MAX_MEM_MB=1024
 
           cd build-async
 
@@ -469,6 +486,7 @@ jobs:
           export HDF5_DIR=/opt/hdf5
           export ABT_DIR=/opt/argobots
           export ASYNC_DIR=/opt/vol-async
+          export HDF5_ASYNC_MAX_MEM_MB=1024
 
           cd build-async
 
@@ -481,6 +499,7 @@ jobs:
           export HDF5_DIR=/opt/hdf5
           export ABT_DIR=/opt/argobots
           export ASYNC_DIR=/opt/vol-async
+          export HDF5_ASYNC_MAX_MEM_MB=1024
 
           cd build-async
 
@@ -488,10 +507,14 @@ jobs:
 
           ./h5bench --debug --abort-on-failure ../samples/async-amrex.json
 
+      - name: Setup tmate session
+        if: ${{ failure() }}
+        uses: mxschmitt/action-tmate@v3
+
       - name: Upload artifact
         if: always()
         uses: actions/upload-artifact@v2
         with:
           name: test
           path: build*/storage/**/std*
-          retention-days: 1
+          retention-days: 5

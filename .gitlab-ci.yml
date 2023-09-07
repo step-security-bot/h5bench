@@ -9,13 +9,15 @@ stages:
 
 build-perlmutter:
     stage: build
+    when: manual
+    allow_failure: false
     rules:
         - if: '$METRICS == null'
     tags:
         - perlmutter
     variables:
         GIT_SUBMODULE_STRATEGY: recursive
-        SCHEDULER_PARAMETERS: "--qos=debug -N 1 -t 00:30:00"
+        SCHEDULER_PARAMETERS: " -A m2621 --qos=debug --constraint=cpu --tasks-per-node=64 -N 1 -t 00:30:00"
         HDF5_DIR: "/global/cfs/cdirs/m2621/h5bench-perlmutter/hdf5/install"
         HDF5_HOME: "/global/cfs/cdirs/m2621/h5bench-perlmutter/hdf5/install"
     script:
@@ -47,7 +49,7 @@ test-perlmutter:
     script:
         - echo "Test h5bench SYNC"
         - cd ${H5BENCH_BUILD_PATH}/perlmutter
-        - export LD_LIBRARY_PATH=$HDF5_DIR/lib:$LD_LIBRARY_PATH
+        - export LD_LIBRARY_PATH=$HDF5_DIR/lib:$H5BENCH_INSTALL_PATH/perlmutter/lib:$LD_LIBRARY_PATH
         - echo "Test h5bench SYNC write/read"
         - python3 ../../samples/update-perlmutter.py ../../samples/sync-write-read-contig-1d-small.json
         - ./h5bench --debug --abort-on-failure --validate-mode ../../samples/sync-write-read-contig-1d-small.json
@@ -81,7 +83,7 @@ build-perlmutter-metrics:
         - perlmutter
     variables:
         GIT_SUBMODULE_STRATEGY: recursive
-        SCHEDULER_PARAMETERS: "--qos=debug -N 1 -t 00:30:00"
+        SCHEDULER_PARAMETERS: " -A m2621 --qos=debug --constraint=cpu --tasks-per-node=64 -N 1 -t 00:30:00"
         HDF5_DIR: "/global/cfs/cdirs/m2621/h5bench-perlmutter/hdf5/install"
         HDF5_HOME: "/global/cfs/cdirs/m2621/h5bench-perlmutter/hdf5/install"
     script:
@@ -111,6 +113,9 @@ metrics-perlmutter:
         HDF5_HOME: "/global/cfs/cdirs/m2621/h5bench-perlmutter/hdf5/install"
         MPICH_MAX_THREAD_SAFETY: "multiple"
     script:
+        - hostname
+        - echo "JOBID ${SLURM_JOB_ID}"
+        - export NERSC_HOST=`cat /etc/clustername`
         - module load python
         - module load darshan
         - export LD_PRELOAD="$DARSHAN_BASE_DIR/lib/libdarshan.so"
