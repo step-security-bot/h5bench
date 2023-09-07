@@ -9,12 +9,12 @@ jobs:
     name: Python Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-python@v2
+      - uses: actions/checkout@ee0669bd1cc54295c223e0bb666b733df41de1c5 # v2.7.0
+      - uses: actions/setup-python@e9aba2c848f5ebd159c070c61ea2c4e2b122355e # v2.3.4
         with:
           python-version: "3.9"
       - name: Run flake8
-        uses: julianwachholz/flake8-action@v2
+        uses: julianwachholz/flake8-action@996f4726ff4a840b0de2d5d0176471648e174b01 # v2
         with:
           checkName: "Python Lint"
           path: src/h5bench.py
